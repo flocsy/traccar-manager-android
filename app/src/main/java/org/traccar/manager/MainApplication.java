@@ -24,9 +24,19 @@ import org.traccar.manager.model.User;
 
 import java.net.CookieManager;
 import java.net.CookiePolicy;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.JavaNetCookieJar;
 import okhttp3.OkHttpClient;
@@ -41,6 +51,7 @@ public class MainApplication extends MultiDexApplication {
     public static final String PREFERENCE_URL = "url";
     public static final String PREFERENCE_EMAIL = "email";
     public static final String PREFERENCE_PASSWORD = "password";
+    public static final String PREFERENCE_IGNORE_SSL_ERRORS="ignoreSslErrors";
 
     private static final String DEFAULT_SERVER = "http://demo.traccar.org"; // local - http://10.0.2.2:8082
 
@@ -87,14 +98,61 @@ public class MainApplication extends MultiDexApplication {
         }
     }
 
+    private OkHttpClient.Builder getHttpClientBuilder(boolean ignoreSslErrors) {
+        if(!ignoreSslErrors){
+            return new OkHttpClient.Builder();
+        }
+
+        final TrustManager[] trustAllCerts = new TrustManager[] {
+            new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                }
+
+                @Override
+                public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                }
+
+                @Override
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                    return new java.security.cert.X509Certificate[]{
+                    };
+                }
+            }
+        };
+
+        SSLContext sslContext;
+        try {
+            sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+        }
+        catch (Exception exception){
+            throw new RuntimeException(exception);
+        }
+
+        final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+        builder.sslSocketFactory(sslSocketFactory, (X509TrustManager)trustAllCerts[0]);
+        builder.hostnameVerifier(new HostnameVerifier() {
+            @Override
+            public boolean verify(String hostname, SSLSession session) {
+                return true;
+            }
+        });
+        return builder;
+    }
+
     private void initService() {
         final String url = preferences.getString(PREFERENCE_URL, null);
         String email = preferences.getString(PREFERENCE_EMAIL, null);
         final String password = preferences.getString(PREFERENCE_PASSWORD, null);
+        final boolean ignoreSslErrors = preferences.getBoolean(PREFERENCE_IGNORE_SSL_ERRORS, false);
+
 
         CookieManager cookieManager = new CookieManager();
         cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
-        client = new OkHttpClient.Builder()
+
+        client = getHttpClientBuilder(ignoreSslErrors)
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .cookieJar(new JavaNetCookieJar(cookieManager)).build();
 

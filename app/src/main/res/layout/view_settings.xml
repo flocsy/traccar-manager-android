@@ -11,4 +11,11 @@
         android:hint="@string/settings_url"
         android:inputType="textUri" />
 
+    <CheckBox
+        android:id="@+id/ignore_ssl_errors"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checked="false"
+        android:text="@string/ignore_ssl_errors"/>
+
 </android.support.design.widget.TextInputLayout>

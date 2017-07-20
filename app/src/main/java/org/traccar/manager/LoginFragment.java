@@ -29,6 +29,7 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -86,8 +87,10 @@ public class LoginFragment extends Fragment {
             public void onClick(View v) {
                 View dialogView = inflater.inflate(R.layout.view_settings, null);
                 final EditText input = (EditText) dialogView.findViewById(R.id.input_url);
+                final CheckBox ignoreSslErrors = (CheckBox)dialogView.findViewById(R.id.ignore_ssl_errors);
 
                 input.setText(preferences.getString(MainApplication.PREFERENCE_URL, null));
+                ignoreSslErrors.setChecked(preferences.getBoolean(MainApplication.PREFERENCE_IGNORE_SSL_ERRORS,false));
 
                 new AlertDialog.Builder(getContext())
                         .setTitle(R.string.settings_title)
@@ -96,8 +99,10 @@ public class LoginFragment extends Fragment {
                             public void onClick(DialogInterface dialog, int which) {
                                 String url = input.getText().toString();
                                 if (HttpUrl.parse(url) != null) {
-                                    preferences.edit().putString(
-                                            MainApplication.PREFERENCE_URL, url).apply();
+                                    SharedPreferences.Editor editor =preferences.edit();
+                                    editor.putString(MainApplication.PREFERENCE_URL, url);
+                                    editor.putBoolean(MainApplication.PREFERENCE_IGNORE_SSL_ERRORS, ignoreSslErrors.isChecked());
+                                    editor.apply();
                                 } else {
                                     Toast.makeText(getContext(), R.string.error_invalid_url, Toast.LENGTH_LONG).show();
                                 }

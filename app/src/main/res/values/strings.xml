@@ -47,4 +47,6 @@
     <string name="command_engine_resume">Engine Resume</string>
     <string name="command_position_periodic">Periodic Reporting</string>
     <string name="command_frequency">Frequency</string>
+    <string name="ignore_ssl_errors">Ignore SSL errors</string>
+    <string name="error_try_again">TRY AGAIN</string>
 </resources>
