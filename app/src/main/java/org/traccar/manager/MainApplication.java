@@ -24,6 +24,7 @@ import org.traccar.manager.model.User;
 
 import java.net.CookieManager;
 import java.net.CookiePolicy;
+import java.net.HttpCookie;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
@@ -38,6 +39,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import okhttp3.Cookie;
 import okhttp3.JavaNetCookieJar;
 import okhttp3.OkHttpClient;
 import retrofit2.Call;
@@ -50,13 +52,14 @@ public class MainApplication extends MultiDexApplication {
     public static final String PREFERENCE_AUTHENTICATED = "authenticated";
     public static final String PREFERENCE_URL = "url";
     public static final String PREFERENCE_EMAIL = "email";
-    public static final String PREFERENCE_PASSWORD = "password";
     public static final String PREFERENCE_IGNORE_SSL_ERRORS="ignoreSslErrors";
+    public static final String PREFERENCE_PERSISTENT_COOKIE="persistentCookie";
+    public static final String PERSISTENT_COOKIE_NAME="tcrm";
 
     private static final String DEFAULT_SERVER = "http://demo.traccar.org"; // local - http://10.0.2.2:8082
 
     public interface GetServiceCallback {
-        void onServiceReady(OkHttpClient client, Retrofit retrofit, WebService service);
+        void onServiceReady(OkHttpClient client, Retrofit retrofit, CookieManager cookieManager, WebService service);
         boolean onFailure();
     }
 
@@ -65,16 +68,39 @@ public class MainApplication extends MultiDexApplication {
     private OkHttpClient client;
     private WebService service;
     private Retrofit retrofit;
+    private CookieManager cookieManager;
     private User user;
 
     private final List<GetServiceCallback> callbacks = new LinkedList<>();
 
     public void getServiceAsync(GetServiceCallback callback) {
         if (service != null) {
-            callback.onServiceReady(client, retrofit, service);
+            callback.onServiceReady(client, retrofit, cookieManager, service);
         } else {
             if (callbacks.isEmpty()) {
                 initService();
+            }
+            callbacks.add(callback);
+        }
+    }
+
+    public void getServiceAsync(HttpCookie persistentLoginCookie,GetServiceCallback callback){
+        if (service != null) {
+            callback.onServiceReady(client, retrofit, cookieManager, service);
+        } else {
+            if (callbacks.isEmpty()) {
+                initService(persistentLoginCookie);
+            }
+            callbacks.add(callback);
+        }
+    }
+
+    public void getServiceAsync(String email, String password, boolean rememberField,GetServiceCallback callback){
+        if (service != null) {
+            callback.onServiceReady(client, retrofit, cookieManager, service);
+        } else {
+            if (callbacks.isEmpty()) {
+                initService(email,password,rememberField);
             }
             callbacks.add(callback);
         }
@@ -132,7 +158,7 @@ public class MainApplication extends MultiDexApplication {
 
         final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
-        builder.sslSocketFactory(sslSocketFactory, (X509TrustManager)trustAllCerts[0]);
+        builder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0]);
         builder.hostnameVerifier(new HostnameVerifier() {
             @Override
             public boolean verify(String hostname, SSLSession session) {
@@ -142,14 +168,11 @@ public class MainApplication extends MultiDexApplication {
         return builder;
     }
 
-    private void initService() {
+    private WebService createService() {
         final String url = preferences.getString(PREFERENCE_URL, null);
-        String email = preferences.getString(PREFERENCE_EMAIL, null);
-        final String password = preferences.getString(PREFERENCE_PASSWORD, null);
         final boolean ignoreSslErrors = preferences.getBoolean(PREFERENCE_IGNORE_SSL_ERRORS, false);
 
-
-        CookieManager cookieManager = new CookieManager();
+        cookieManager = new CookieManager();
         cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
 
         client = getHttpClientBuilder(ignoreSslErrors)
@@ -170,15 +193,53 @@ public class MainApplication extends MultiDexApplication {
             callbacks.clear();
         }
 
-        final WebService service = retrofit.create(WebService.class);
+        return retrofit.create(WebService.class);
+    }
 
-        service.addSession(email, password).enqueue(new WebServiceCallback<User>(this) {
+    private void initService(){
+        initService(null);
+    }
+
+    private void initService(String email, String password, boolean rememberField) {
+        final WebService service = createService();
+        service.addSession(email, password,rememberField).enqueue(new WebServiceCallback<User>(this) {
             @Override
             public void onSuccess(Response<User> response) {
                 MainApplication.this.service = service;
                 MainApplication.this.user = response.body();
                 for (GetServiceCallback callback : callbacks) {
-                    callback.onServiceReady(client, retrofit, service);
+                    callback.onServiceReady(client, retrofit, cookieManager, service);
+                }
+                callbacks.clear();
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                boolean handled = false;
+                for (GetServiceCallback callback : callbacks) {
+                    handled = callback.onFailure();
+                }
+                callbacks.clear();
+                if (!handled) {
+                    super.onFailure(call, t);
+                }
+            }
+        });
+    }
+
+    private void initService(HttpCookie persistentLoginCookie) {
+        final WebService service = createService();
+        if(persistentLoginCookie != null) {
+            cookieManager.getCookieStore().add(retrofit.baseUrl().uri(), persistentLoginCookie);
+        }
+
+        service.getSession().enqueue(new WebServiceCallback<User>(this) {
+            @Override
+            public void onSuccess(Response<User> response) {
+                MainApplication.this.service = service;
+                MainApplication.this.user = response.body();
+                for (GetServiceCallback callback : callbacks) {
+                    callback.onServiceReady(client, retrofit, cookieManager, service);
                 }
                 callbacks.clear();
             }

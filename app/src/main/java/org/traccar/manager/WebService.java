@@ -35,8 +35,12 @@ import retrofit2.http.Query;
 public interface WebService {
 
     @FormUrlEncoded
+    @GET("/api/session")
+    Call<User> getSession();
+
+    @FormUrlEncoded
     @POST("/api/session")
-    Call<User> addSession(@Field("email") String email, @Field("password") String password);
+    Call<User> addSession(@Field("email") String email, @Field("password") String password,  @Field("rememberField") boolean rememberField);
 
     @GET("/api/devices")
     Call<List<Device>> getDevices();

@@ -41,6 +41,7 @@ import org.traccar.manager.model.Update;
 import org.traccar.manager.model.User;
 
 import java.io.IOException;
+import java.net.CookieManager;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
@@ -229,7 +230,7 @@ public class MainFragment extends SupportMapFragment implements OnMapReadyCallba
         final MainApplication application = (MainApplication) getActivity().getApplication();
         application.getServiceAsync(new MainApplication.GetServiceCallback() {
             @Override
-            public void onServiceReady(final OkHttpClient client, final Retrofit retrofit, WebService service) {
+            public void onServiceReady(final OkHttpClient client, final Retrofit retrofit, CookieManager cookieManager, WebService service) {
                 User user = application.getUser();
                 map.moveCamera(CameraUpdateFactory.newLatLngZoom(
                         new LatLng(user.getLatitude(), user.getLongitude()), user.getZoom()));

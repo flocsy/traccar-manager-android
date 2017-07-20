@@ -34,6 +34,10 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.net.CookieManager;
+import java.net.HttpCookie;
+import java.util.List;
+
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import retrofit2.Retrofit;
@@ -79,7 +83,7 @@ public class LoginFragment extends Fragment {
         emailInput.setText(preferences.getString(MainApplication.PREFERENCE_EMAIL, null));
 
         if (preferences.getBoolean(MainApplication.PREFERENCE_AUTHENTICATED, false)) {
-            login();
+            login(preferences.getString(MainApplication.PREFERENCE_PERSISTENT_COOKIE, null));
         }
 
         view.findViewById(R.id.button_settings).setOnClickListener(new View.OnClickListener() {
@@ -87,10 +91,10 @@ public class LoginFragment extends Fragment {
             public void onClick(View v) {
                 View dialogView = inflater.inflate(R.layout.view_settings, null);
                 final EditText input = (EditText) dialogView.findViewById(R.id.input_url);
-                final CheckBox ignoreSslErrors = (CheckBox)dialogView.findViewById(R.id.ignore_ssl_errors);
+                final CheckBox ignoreSslErrors = (CheckBox) dialogView.findViewById(R.id.ignore_ssl_errors);
 
                 input.setText(preferences.getString(MainApplication.PREFERENCE_URL, null));
-                ignoreSslErrors.setChecked(preferences.getBoolean(MainApplication.PREFERENCE_IGNORE_SSL_ERRORS,false));
+                ignoreSslErrors.setChecked(preferences.getBoolean(MainApplication.PREFERENCE_IGNORE_SSL_ERRORS, false));
 
                 new AlertDialog.Builder(getContext())
                         .setTitle(R.string.settings_title)
@@ -99,9 +103,10 @@ public class LoginFragment extends Fragment {
                             public void onClick(DialogInterface dialog, int which) {
                                 String url = input.getText().toString();
                                 if (HttpUrl.parse(url) != null) {
-                                    SharedPreferences.Editor editor =preferences.edit();
+                                    SharedPreferences.Editor editor = preferences.edit();
                                     editor.putString(MainApplication.PREFERENCE_URL, url);
                                     editor.putBoolean(MainApplication.PREFERENCE_IGNORE_SSL_ERRORS, ignoreSslErrors.isChecked());
+
                                     editor.apply();
                                 } else {
                                     Toast.makeText(getContext(), R.string.error_invalid_url, Toast.LENGTH_LONG).show();
@@ -116,30 +121,88 @@ public class LoginFragment extends Fragment {
         loginButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                preferences
-                        .edit()
-                        .putBoolean(MainApplication.PREFERENCE_AUTHENTICATED, true)
-                        .putString(MainApplication.PREFERENCE_EMAIL, emailInput.getText().toString())
-                        .putString(MainApplication.PREFERENCE_PASSWORD, passwordInput.getText().toString())
-                        .apply();
-
-                login();
+                login(emailInput.getText().toString(),passwordInput.getText().toString());
             }
         });
 
         return view;
     }
 
-    private void login() {
+    private void login(final String email, String password) {
         final ProgressDialog progress = new ProgressDialog(getContext());
         progress.setMessage(getString(R.string.app_loading));
         progress.setCancelable(false);
         progress.show();
         final MainApplication application = (MainApplication) getActivity().getApplication();
-        application.getServiceAsync(new MainApplication.GetServiceCallback() {
+        application.getServiceAsync(email, password, true, new MainApplication.GetServiceCallback() {
             @Override
-            public void onServiceReady(OkHttpClient client, Retrofit retrofit, WebService service) {
+            public void onServiceReady(OkHttpClient client, Retrofit retrofit, CookieManager cookieManager, WebService service) {
+                saveLoginEmail(email);
+                savePersistentCookie(cookieManager);
+                if (progress.isShowing()) {
+                    progress.dismiss();
+                }
+                getActivity().finish();
+                startActivity(new Intent(getContext(), MainActivity.class));
+            }
+
+            @Override
+            public boolean onFailure() {
+                if (progress.isShowing()) {
+                    progress.dismiss();
+                }
+                return false;
+            }
+        });
+    }
+
+    private void saveLoginEmail(String email){
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getContext());
+        SharedPreferences.Editor editor = preferences.edit();
+        if(email != null && !email.isEmpty())
+            editor.putString(MainApplication.PREFERENCE_EMAIL, email);
+        editor.apply();
+    }
+
+    private void savePersistentCookie(CookieManager cookieManager){
+        List<HttpCookie> httpCookies = cookieManager.getCookieStore().getCookies();
+        for (HttpCookie cookie : httpCookies) {
+            if (cookie.getName().equalsIgnoreCase(MainApplication.PERSISTENT_COOKIE_NAME)) {
+                savePersistentCookie(cookie.toString());
+            }
+        }
+    }
+
+    private void savePersistentCookie(String cookie){
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getContext());
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString(MainApplication.PREFERENCE_PERSISTENT_COOKIE, cookie);
+        editor.putBoolean(MainApplication.PREFERENCE_AUTHENTICATED, true);
+        editor.apply();
+    }
+
+    private ProgressDialog getProcessDialog(){
+        ProgressDialog progress = new ProgressDialog(getContext());
+        progress.setMessage(getString(R.string.app_loading));
+        progress.setCancelable(false);
+        return progress;
+    }
+
+    private void login(String persitentCookie) {
+        if(persitentCookie == null || persitentCookie.isEmpty())
+            return;
+
+        List<HttpCookie> cookie=HttpCookie.parse(persitentCookie);
+        if(cookie == null || cookie.isEmpty())
+            return;
+
+        final ProgressDialog progress = getProcessDialog();
+        progress.show();
+        final MainApplication application = (MainApplication) getActivity().getApplication();
+        application.getServiceAsync(cookie.get(0), new MainApplication.GetServiceCallback() {
+            @Override
+            public void onServiceReady(OkHttpClient client, Retrofit retrofit, CookieManager cookieManager, WebService service) {
+                savePersistentCookie(cookieManager);
                 if (progress.isShowing()) {
                     progress.dismiss();
                 }

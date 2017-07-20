@@ -25,6 +25,7 @@ import android.widget.ListView;
 
 import org.traccar.manager.model.Device;
 
+import java.net.CookieManager;
 import java.util.List;
 
 import okhttp3.OkHttpClient;
@@ -42,7 +43,7 @@ public class DevicesFragment extends ListFragment {
         final MainApplication application = (MainApplication) getActivity().getApplication();
         application.getServiceAsync(new MainApplication.GetServiceCallback() {
             @Override
-            public void onServiceReady(OkHttpClient client, Retrofit retrofit, WebService service) {
+            public void onServiceReady(OkHttpClient client, Retrofit retrofit, CookieManager cookieManager, WebService service) {
                 service.getDevices().enqueue(new WebServiceCallback<List<Device>>(getContext()) {
                     @Override
                     public void onSuccess(Response<List<Device>> response) {
